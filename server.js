@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import { PORT, CLIENT_URL, IS_DEV } from "./lib/config.js";
+import { PORT, CLIENT_ORIGINS, IS_DEV } from "./lib/config.js";
 import { connectDb, closeDb, DB_NAME } from "./lib/db.js";
 import { seedAdminAndSamples } from "./lib/seed.js";
 import apiRouter from "./routes/api.js";
@@ -10,7 +10,13 @@ const app = express();
 
 const corsOptions = IS_DEV
   ? { origin: true, credentials: true }
-  : { origin: CLIENT_URL, credentials: true };
+  : {
+      origin(origin, callback) {
+        if (!origin || CLIENT_ORIGINS.includes(origin)) callback(null, true);
+        else callback(null, false);
+      },
+      credentials: true,
+    };
 
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
@@ -25,7 +31,7 @@ async function start() {
     await seedAdminAndSamples();
     app.listen(PORT, () => {
       console.log(`Partner Portal API running on http://localhost:${PORT}`);
-      console.log(`CORS: ${CLIENT_URL}${IS_DEV ? " + localhost:*" : ""}`);
+      console.log(`CORS origins: ${CLIENT_ORIGINS.join(", ")}${IS_DEV ? " (+ any in dev)" : ""}`);
     });
   } catch (err) {
     console.error("MongoDB connection failed:", err.message);
