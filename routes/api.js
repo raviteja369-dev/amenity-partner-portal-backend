@@ -374,6 +374,10 @@ router.get("/dashboard/partner", currentUser, requirePartner, async (req, res) =
 // ----- Public landing stats (no auth) -----
 const LANDING_BRANDS = new Set(["eduosa", "c-forgia", "facilo"]);
 
+router.get("/health", (_req, res) => {
+  res.json({ ok: true, service: "amenity-partner-portal-api" });
+});
+
 router.get("/stats/landing", async (req, res) => {
   const brand = String(req.query.brand || "").toLowerCase();
   if (!LANDING_BRANDS.has(brand)) {
