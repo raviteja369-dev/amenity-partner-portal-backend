@@ -371,4 +371,61 @@ router.get("/dashboard/partner", currentUser, requirePartner, async (req, res) =
   });
 });
 
+// ----- Public landing stats (no auth) -----
+const LANDING_BRANDS = new Set(["eduosa", "c-forgia", "facilo"]);
+
+router.get("/stats/landing", async (req, res) => {
+  const brand = String(req.query.brand || "").toLowerCase();
+  if (!LANDING_BRANDS.has(brand)) {
+    return httpError(res, 400, "Invalid brand. Use eduosa, c-forgia, or facilo.");
+  }
+
+  const db = getDb();
+  const qPartners = { brand };
+  const qLeads = { brand };
+
+  const total_partners = await db.collection("partners").countDocuments(qPartners);
+  const total_leads = await db.collection("leads").countDocuments(qLeads);
+  const total_clients = await db.collection("leads").countDocuments({ ...qLeads, status: "client" });
+
+  const paid = await db.collection("leads").aggregate([
+    { $match: { ...qLeads, status: "client", payment_status: "paid" } },
+    { $group: { _id: null, total: { $sum: "$deal_value" } } },
+  ]).toArray();
+  const total_revenue = paid.length ? Number(paid[0].total) : 0;
+
+  const pendingAgg = await db.collection("leads").aggregate([
+    { $match: { ...qLeads, status: "client", payment_status: "unpaid" } },
+    { $group: { _id: null, total: { $sum: "$deal_value" } } },
+  ]).toArray();
+  const pending_revenue = pendingAgg.length ? Number(pendingAgg[0].total) : 0;
+
+  const monthlyRaw = await db.collection("leads").aggregate([
+    { $match: qLeads },
+    { $project: { month: { $substr: ["$created_at", 0, 7] } } },
+    { $group: { _id: "$month", leads: { $sum: 1 } } },
+    { $sort: { _id: 1 } },
+  ]).toArray();
+
+  const monthly = monthlyRaw.slice(-7).map((r) => ({
+    month: r._id,
+    leads: r.leads,
+  }));
+
+  const conversion_rate = total_leads ? Math.round((total_clients / total_leads) * 100) : 0;
+
+  res.json({
+    brand,
+    kpis: {
+      total_partners,
+      total_leads,
+      total_clients,
+      total_revenue,
+      pending_revenue,
+      conversion_rate,
+    },
+    monthly,
+  });
+});
+
 export default router;
